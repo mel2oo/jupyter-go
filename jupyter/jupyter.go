@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -33,6 +34,8 @@ func NewClient(opts ...Option) (*Client, error) {
 	}
 
 	client.baseURL, _ = url.Parse("http://localhost:8888")
+	client.Kernels = &KernelService{client}
+	client.Sessions = &SessionService{client}
 	client.Contents = &ContentService{client}
 
 	for _, o := range opts {
@@ -92,7 +95,13 @@ func (c *Client) Do(req *http.Request, v interface{}) error {
 	}
 	defer resp.Body.Close()
 
-	return json.NewDecoder(resp.Body).Decode(v)
+	data, _ := io.ReadAll(resp.Body)
+	fmt.Println(string(data))
+
+	if v != nil {
+		return json.NewDecoder(bytes.NewBuffer(data)).Decode(v)
+	}
+	return nil
 }
 
 // VersionResponse defines the structure for the /api/ version endpoint.
