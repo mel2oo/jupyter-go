@@ -8,11 +8,9 @@ import (
 )
 
 func TestGetVersion(t *testing.T) {
-	cli, err := NewClient(WithBaseURL("http://192.168.134.142:8888"))
+	cli, err := NewClient(WithBaseURL("http://127.0.0.1:8888"))
 	assert.NoError(t, err)
 
-	res, err := cli.GetVersion(context.Background())
+	_, err = cli.GetVersion(context.TODO())
 	assert.NoError(t, err)
-
-	println(res)
 }

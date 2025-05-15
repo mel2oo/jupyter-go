@@ -85,17 +85,14 @@ func (c *Client) NewRequest(ctx context.Context, method, endpoint string, body i
 	return req, nil
 }
 
-func (c *Client) Do(req *http.Request, v interface{}) (*http.Response, error) {
+func (c *Client) Do(req *http.Request, v interface{}) error {
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 
-	if v != nil {
-		return resp, json.NewDecoder(resp.Body).Decode(v)
-	}
-	return resp, nil
+	return json.NewDecoder(resp.Body).Decode(v)
 }
 
 // VersionResponse defines the structure for the /api/ version endpoint.
@@ -110,13 +107,10 @@ func (c *Client) GetVersion(ctx context.Context) (*VersionResponse, error) {
 		return nil, err
 	}
 
-	resp, err := c.Do(req, &VersionResponse{})
-	if err != nil {
+	var resp VersionResponse
+	if err := c.Do(req, &resp); err != nil {
 		return nil, err
 	}
-	var versionResp VersionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&versionResp); err != nil {
-		return nil, err
-	}
-	return &versionResp, nil
+
+	return &resp, nil
 }
