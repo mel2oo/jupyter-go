@@ -1,2 +1,2 @@
 # jupyter-go
-jupyter sdk
+jupyter server sdk
