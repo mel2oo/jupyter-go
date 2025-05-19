@@ -2,6 +2,7 @@ package jupyter
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,9 +23,7 @@ func TestCodeExecute(t *testing.T) {
 	ch, err := cli.Sessions.Connect(context.TODO(), s1.Kernel.ID, s1.ID)
 	assert.NoError(t, err)
 
-	go ch.Recv()
-
-	assert.NoError(t, ch.CodeExecute(context.TODO(), s1.ID, `print("print hello!")
+	res, err := ch.CodeExecute(context.TODO(), `print("print hello!")
 
 def handler():
     return {"key": "function hello1"}
@@ -33,7 +32,15 @@ def handler1():
     return "function hello2"
 
 handler()
-handler()`))
+handler()`)
+	assert.NoError(t, err)
 
-	select {}
+	fmt.Println(res)
+
+	list, err := cli.Sessions.List(context.TODO())
+	assert.NoError(t, err)
+
+	for _, v := range list {
+		assert.NoError(t, cli.Sessions.Delete(context.TODO(), v.ID))
+	}
 }

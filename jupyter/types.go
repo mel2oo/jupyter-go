@@ -1,7 +1,5 @@
 package jupyter
 
-import "github.com/google/uuid"
-
 const (
 	SessionNotebook = "notebook"
 	SessionConsole  = "console"
@@ -34,37 +32,41 @@ type Notebook struct {
 // ws message
 
 const (
-	MsgExecuteRequest    = "execute_request"
-	MsgCompleteRequest   = "complete_request"
-	MsgKernelInfoRequest = "kernel_info_request"
+	MsgExecuteRequest = "execute_request"
+
+	MsgError         = "error"
+	MsgStream        = "stream"
+	MsgStatus        = "status"
+	MsgDisplayData   = "display_data"
+	MsgExecuteInput  = "execute_input"
+	MsgExecuteReply  = "execute_reply"
+	MsgExecuteResult = "execute_result"
 )
 
-type JupyterMessage struct {
+type JupyterRequestMessage struct {
 	Header       MessageHeader  `json:"header"`
-	ParentHeader map[string]any `json:"parent_header"`
+	ParentHeader MessageHeader  `json:"parent_header"`
 	Metadata     map[string]any `json:"metadata"`
 	Content      map[string]any `json:"content"`
+	Buffers      []any          `json:"buffers"`
+}
+
+type JupyterResponseMessage struct {
+	MsgID        string         `json:"msg_id"`
+	MsgType      string         `json:"msg_type"`
+	Header       MessageHeader  `json:"header"`
+	ParentHeader MessageHeader  `json:"parent_header"`
+	Metadata     map[string]any `json:"metadata"`
+	Content      map[string]any `json:"content"`
+	Buffers      []any          `json:"buffers"`
+	Channel      string         `json:"channel"`
 }
 
 type MessageHeader struct {
-	Date     string `json:"date,omitempty"`
 	MsgID    string `json:"msg_id"`
 	MsgType  string `json:"msg_type"`
-	Session  string `json:"session"`
 	Username string `json:"username"`
+	Session  string `json:"session"`
+	Date     string `json:"date"`
 	Version  string `json:"version"`
-}
-
-func NewMessageTmpl(sessionID string) *JupyterMessage {
-	return &JupyterMessage{
-		Header: MessageHeader{
-			MsgID:    uuid.New().String(),
-			Session:  sessionID,
-			Username: "go-client",
-			Version:  "5.0",
-		},
-		ParentHeader: map[string]any{},
-		Metadata:     map[string]any{},
-		Content:      map[string]any{},
-	}
 }
