@@ -1,4 +1,4 @@
-module jupyter-go
+module github.com/mel2oo/jupyter-go
 
 go 1.23.6
 
