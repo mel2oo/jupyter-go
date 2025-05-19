@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,7 +98,7 @@ func (c *Channel) newExecuteRequest(msgID, code string) *JupyterRequestMessage {
 		Content: map[string]any{
 			"code":             code,
 			"slient":           true,
-			"store_history":    false,
+			"store_history":    true,
 			"user_expressions": map[string]any{},
 			"allow_stdin":      false,
 			"stop_on_error":    true,
@@ -137,82 +138,53 @@ func (c *Channel) processMessage(msg *JupyterResponseMessage) {
 			return
 		}
 
-		name, _ := msg.Content["ename"].(string)
-		value, _ := msg.Content["evalue"].(string)
-		traceback, _ := msg.Content["traceback"].(string)
-
-		execution.put(newOutputError(name, value, traceback))
+		execution.put(newOutputError(msg.Content.Ename, msg.Content.Evalue,
+			strings.Join(msg.Content.Traceback, "\n")))
 		execution.setErrored()
 
 	case MsgStream:
-		name, ok := msg.Content["name"].(string)
-		if !ok {
+		if msg.Content.Name == "stdout" {
+			execution.put(newOutputStdout(msg.Header.Date, msg.Content.Text))
 			return
 		}
 
-		if name == "stdout" {
-			execution.put(newOutputStdout(msg.Header.Date, msg.Content["text"]))
-			return
-		}
-
-		if name == "stderr" {
-			execution.put(newOutputStderr(msg.Header.Date, msg.Content["text"]))
+		if msg.Content.Name == "stderr" {
+			execution.put(newOutputStderr(msg.Header.Date, msg.Content.Text))
 		}
 
 	case MsgDisplayData, MsgExecuteResult:
-		data, ok := msg.Content["data"].(map[string]any)
-		if !ok {
-			return
-		}
-
-		execution.put(newOutputResult(data))
+		execution.put(newOutputResult(msg.Content.Data))
 
 	case MsgStatus:
-		state, ok := msg.Content["execution_state"].(string)
-		if !ok {
-			return
-		}
-
-		if state == "busy" {
+		if msg.Content.ExecutionState == "busy" {
 			execution.setInputAccepted()
 		}
 
-		if state == "idle" {
+		if msg.Content.ExecutionState == "idle" {
 			if execution.inputAccepted {
 				execution.put(newEndOfExecution())
 			}
 		}
 
-		if state == "error" {
-			name, _ := msg.Content["ename"].(string)
-			value, _ := msg.Content["evalue"].(string)
-			traceback, _ := msg.Content["traceback"].(string)
-
-			execution.put(newOutputError(name, value, traceback))
+		if msg.Content.ExecutionState == "error" {
+			execution.put(newOutputError(msg.Content.Ename, msg.Content.Evalue,
+				strings.Join(msg.Content.Traceback, "\n")))
 			execution.put(newEndOfExecution())
 		}
 
 	case MsgExecuteReply:
-		status, ok := msg.Content["status"].(string)
-		if !ok {
-			return
-		}
-
-		if status == "error" {
+		if msg.Content.Status == "error" {
 			if execution.errored {
 				return
 			}
 
-			name, _ := msg.Content["ename"].(string)
-			value, _ := msg.Content["evalue"].(string)
-			traceback, _ := msg.Content["traceback"].(string)
-
-			execution.put(newOutputError(name, value, traceback))
+			execution.put(newOutputError(msg.Content.Ename, msg.Content.Evalue,
+				strings.Join(msg.Content.Traceback, "\n")))
 			execution.setErrored()
 			return
 		}
 
-		if status == "abort" {
+		if msg.Content.Status == "abort" {
 			execution.put(newOutputError("aborted", "execution was aborted", ""))
 			return
 		}

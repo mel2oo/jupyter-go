@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -95,11 +94,8 @@ func (c *Client) Do(req *http.Request, v interface{}) error {
 	}
 	defer resp.Body.Close()
 
-	data, _ := io.ReadAll(resp.Body)
-	fmt.Println(string(data))
-
 	if v != nil {
-		return json.NewDecoder(bytes.NewBuffer(data)).Decode(v)
+		return json.NewDecoder(resp.Body).Decode(v)
 	}
 	return nil
 }

@@ -23,19 +23,27 @@ func TestCodeExecute(t *testing.T) {
 	ch, err := cli.Sessions.Connect(context.TODO(), s1.Kernel.ID, s1.ID)
 	assert.NoError(t, err)
 
-	res, err := ch.CodeExecute(context.TODO(), `print("print hello!")
+	res, err := ch.CodeExecute(context.TODO(), `# coding=utf-8
+
+import types
+import base64
+import runtime
+
 
 def handler():
-    return {"key": "function hello1"}
+	return {"key": "function hello1"}
 
-def handler1():
-    return "function hello2"
-
-handler()
 handler()`)
 	assert.NoError(t, err)
 
-	fmt.Println(res)
+	for _, r := range res {
+		switch v := r.(type) {
+		case OutputError:
+			fmt.Println(v.Traceback)
+		default:
+			fmt.Println(v)
+		}
+	}
 
 	list, err := cli.Sessions.List(context.TODO())
 	assert.NoError(t, err)

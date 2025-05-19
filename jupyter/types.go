@@ -57,9 +57,18 @@ type JupyterResponseMessage struct {
 	Header       MessageHeader  `json:"header"`
 	ParentHeader MessageHeader  `json:"parent_header"`
 	Metadata     map[string]any `json:"metadata"`
-	Content      map[string]any `json:"content"`
-	Buffers      []any          `json:"buffers"`
-	Channel      string         `json:"channel"`
+	Content      struct {
+		Name           string         `json:"name,omitempty"`
+		Text           string         `json:"text,omitempty"`
+		Data           map[string]any `json:"data,omitempty"`
+		Ename          string         `json:"ename,omitempty"`
+		Evalue         string         `json:"evalue,omitempty"`
+		Traceback      []string       `json:"traceback,omitempty"`
+		ExecutionState string         `json:"execution_state,omitempty"`
+		Status         string         `json:"status,omitempty"`
+	} `json:"content,omitempty"`
+	Buffers []any  `json:"buffers"`
+	Channel string `json:"channel"`
 }
 
 type MessageHeader struct {
