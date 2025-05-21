@@ -42,7 +42,7 @@ func (c *Channel) Close() error {
 }
 
 // code execute
-func (c *Channel) CodeExecute(ctx context.Context, code string) ([]any, error) {
+func (c *Channel) CodeExecute(ctx context.Context, code string) ([]*Output, error) {
 	msgID := uuid.NewString()
 	exection := &Exection{queue: make(chan *Output, 10)}
 
@@ -53,7 +53,7 @@ func (c *Channel) CodeExecute(ctx context.Context, code string) ([]any, error) {
 		return nil, err
 	}
 
-	res := make([]any, 0)
+	res := make([]*Output, 0)
 	for {
 		val, err := exection.Recv()
 		if err != nil || err == io.EOF {
