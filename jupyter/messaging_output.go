@@ -1,71 +1,56 @@
 package jupyter
 
 const (
+	OutTypeError         = "error"
 	OutTypeStdout        = "stdout"
 	OutTypeStderr        = "stderr"
 	OutTypeResult        = "result"
 	OutTypeEndOfExection = "end_of_execution"
 )
 
-type OutputStdout struct {
+type Output struct {
 	Type      string `json:"type,omitempty"`
 	Timestamp any    `json:"timestamp,omitempty"`
 	Data      any    `json:"data,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Value     string `json:"value,omitempty"`
+	Traceback string `json:"traceback,omitempty"`
 }
 
-func newOutputStdout(ts, data any) OutputStdout {
-	return OutputStdout{
+func newOutputStdout(ts, data any) *Output {
+	return &Output{
 		Type:      OutTypeStdout,
 		Timestamp: ts,
 		Data:      data,
 	}
 }
 
-type OutputStderr struct {
-	Type      string `json:"type,omitempty"`
-	Timestamp any    `json:"timestamp,omitempty"`
-	Data      any    `json:"data,omitempty"`
-}
-
-func newOutputStderr(ts, data any) OutputStderr {
-	return OutputStderr{
+func newOutputStderr(ts, data any) *Output {
+	return &Output{
 		Type:      OutTypeStderr,
 		Timestamp: ts,
 		Data:      data,
 	}
 }
 
-type OutputResult struct {
-	Type string         `json:"type,omitempty"`
-	Data map[string]any `json:"data,omitempty"`
-}
-
-func newOutputResult(data map[string]any) OutputResult {
-	return OutputResult{
+func newOutputResult(data map[string]any) *Output {
+	return &Output{
 		Type: OutTypeResult,
 		Data: data,
 	}
 }
 
-type OutputError struct {
-	Type      string `json:"type,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Value     string `json:"value,omitempty"`
-	Traceback string `json:"traceback,omitempty"`
-}
-
-func newOutputError(name, value, traceback string) OutputError {
-	return OutputError{
+func newOutputError(name, value, traceback string) *Output {
+	return &Output{
+		Type:      OutTypeError,
 		Name:      name,
 		Value:     value,
 		Traceback: traceback,
 	}
 }
 
-type EndOfExecution struct {
-	Type string `json:"type,omitempty"`
-}
-
-func newEndOfExecution() EndOfExecution {
-	return EndOfExecution{OutTypeEndOfExection}
+func newEndOfExecution() *Output {
+	return &Output{
+		Type: OutTypeEndOfExection,
+	}
 }

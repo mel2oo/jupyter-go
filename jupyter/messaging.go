@@ -44,7 +44,7 @@ func (c *Channel) Close() error {
 // code execute
 func (c *Channel) CodeExecute(ctx context.Context, code string) ([]any, error) {
 	msgID := uuid.NewString()
-	exection := &Exection{queue: make(chan any, 10)}
+	exection := &Exection{queue: make(chan *Output, 10)}
 
 	c.executions[msgID] = exection
 	defer delete(c.executions, msgID)
@@ -66,7 +66,7 @@ func (c *Channel) CodeExecute(ctx context.Context, code string) ([]any, error) {
 
 func (c *Channel) CodeExecuteStream(ctx context.Context, code string) (*Exection, error) {
 	msgID := uuid.NewString()
-	exection := &Exection{queue: make(chan any, 10)}
+	exection := &Exection{queue: make(chan *Output, 10)}
 
 	c.executions[msgID] = exection
 	defer delete(c.executions, msgID)
@@ -195,23 +195,23 @@ func (c *Channel) processMessage(msg *JupyterResponseMessage) {
 }
 
 type Exection struct {
-	queue         chan any
+	queue         chan *Output
 	inputAccepted bool
 	errored       bool
 }
 
-func (e *Exection) put(v any) { e.queue <- v }
+func (e *Exection) put(v *Output) { e.queue <- v }
 
 func (e *Exection) setInputAccepted() { e.inputAccepted = true }
 
 func (e *Exection) setErrored() { e.errored = true }
 
-func (e *Exection) Recv() (any, error) {
+func (e *Exection) Recv() (*Output, error) {
 	msg := <-e.queue
-	switch val := msg.(type) {
-	case EndOfExecution:
+	switch msg.Type {
+	case OutTypeEndOfExection:
 		return nil, io.EOF
 	default:
-		return val, nil
+		return msg, nil
 	}
 }
