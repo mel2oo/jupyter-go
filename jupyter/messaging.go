@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,7 +17,7 @@ type Channel struct {
 	ws         *websocket.Conn
 	kernelID   string
 	sessionID  string
-	executions map[string]*Exection
+	executions sync.Map
 }
 
 func (s *SessionService) Connect(ctx context.Context, kernelID, sessionID string) (*Channel, error) {
@@ -28,10 +29,11 @@ func (s *SessionService) Connect(ctx context.Context, kernelID, sessionID string
 	}
 
 	c := &Channel{
-		ws:         ws,
-		kernelID:   kernelID,
-		sessionID:  sessionID,
-		executions: make(map[string]*Exection),
+		ws:        ws,
+		kernelID:  kernelID,
+		sessionID: sessionID,
+
+		executions: sync.Map{},
 	}
 
 	return c, c.receiveMessage()
@@ -46,8 +48,8 @@ func (c *Channel) CodeExecute(ctx context.Context, code string) ([]*Output, erro
 	msgID := uuid.NewString()
 	exection := &Exection{queue: make(chan *Output, 10)}
 
-	c.executions[msgID] = exection
-	defer delete(c.executions, msgID)
+	c.executions.Store(msgID, exection)
+	defer c.executions.Delete(msgID)
 
 	if err := c.ws.WriteJSON(c.newExecuteRequest(msgID, code)); err != nil {
 		return nil, err
@@ -68,8 +70,8 @@ func (c *Channel) CodeExecuteStream(ctx context.Context, code string) (*Exection
 	msgID := uuid.NewString()
 	exection := &Exection{queue: make(chan *Output, 10)}
 
-	c.executions[msgID] = exection
-	defer delete(c.executions, msgID)
+	c.executions.Store(msgID, exection)
+	defer c.executions.Delete(msgID)
 
 	if err := c.ws.WriteJSON(c.newExecuteRequest(msgID, code)); err != nil {
 		return nil, err
@@ -127,7 +129,12 @@ func (c *Channel) receiveMessage() error {
 }
 
 func (c *Channel) processMessage(msg *JupyterResponseMessage) {
-	execution, ok := c.executions[msg.ParentHeader.MsgID]
+	v, ok := c.executions.Load(msg.ParentHeader.MsgID)
+	if !ok {
+		return
+	}
+
+	execution, ok := v.(*Exection)
 	if !ok {
 		return
 	}
