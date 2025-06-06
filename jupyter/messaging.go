@@ -22,8 +22,8 @@ type Channel struct {
 
 func (s *SessionService) Connect(ctx context.Context, kernelID, sessionID string) (*Channel, error) {
 	ws, _, err := websocket.DefaultDialer.Dial(
-		fmt.Sprintf("ws://localhost:8888/api/kernels/%s/channels",
-			kernelID), nil)
+		fmt.Sprintf("ws://localhost:8888/api/kernels/%s/channels?session_id=%s",
+			kernelID, sessionID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +41,14 @@ func (s *SessionService) Connect(ctx context.Context, kernelID, sessionID string
 
 func (c *Channel) Close() error {
 	return c.ws.Close()
+}
+
+func (c *Channel) KernelID() string {
+	return c.kernelID
+}
+
+func (c *Channel) SessionID() string {
+	return c.sessionID
 }
 
 // code execute
