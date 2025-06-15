@@ -49,6 +49,7 @@ type JupyterRequestMessage struct {
 	Metadata     map[string]any `json:"metadata"`
 	Content      map[string]any `json:"content"`
 	Buffers      []any          `json:"buffers"`
+	Channel      string         `json:"channel"`
 }
 
 type JupyterResponseMessage struct {

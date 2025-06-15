@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -93,6 +94,12 @@ func (c *Client) Do(req *http.Request, v interface{}) error {
 		return err
 	}
 	defer resp.Body.Close()
+
+	// 检查 HTTP 状态码
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, string(body))
+	}
 
 	if v != nil {
 		return json.NewDecoder(resp.Body).Decode(v)

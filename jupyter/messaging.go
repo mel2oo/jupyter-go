@@ -15,13 +15,18 @@ import (
 
 type Channel struct {
 	ws         *websocket.Conn
-	kernelID   string
 	sessionID  string
 	executions sync.Map
+	done       chan struct{}
+	errChan    chan error
 }
 
-func (s *SessionService) Connect(ctx context.Context, kernelID, sessionID string) (*Channel, error) {
-	ws, _, err := websocket.DefaultDialer.Dial(
+func (s *SessionService) Connect(ctx context.Context, sessionID, kernelID string) (*Channel, error) {
+	// 设置连接超时
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	ws, _, err := websocket.DefaultDialer.DialContext(ctx,
 		fmt.Sprintf("ws://%s/api/kernels/%s/channels?session_id=%s",
 			s.client.baseURL.Host, kernelID, sessionID), nil)
 	if err != nil {
@@ -29,34 +34,27 @@ func (s *SessionService) Connect(ctx context.Context, kernelID, sessionID string
 	}
 
 	c := &Channel{
-		ws:        ws,
-		kernelID:  kernelID,
-		sessionID: sessionID,
-
+		ws:         ws,
+		sessionID:  sessionID,
 		executions: sync.Map{},
+		done:       make(chan struct{}),
+		errChan:    make(chan error, 1),
 	}
 
 	return c, c.receiveMessage()
 }
 
 func (c *Channel) Close() error {
+	close(c.done)
 	return c.ws.Close()
-}
-
-func (c *Channel) KernelID() string {
-	return c.kernelID
-}
-
-func (c *Channel) SessionID() string {
-	return c.sessionID
 }
 
 // code execute
 func (c *Channel) CodeExecute(ctx context.Context, code string) ([]*Output, error) {
 	msgID := uuid.NewString()
-	exection := &Exection{queue: make(chan *Output, 10)}
+	execution := &Exection{queue: make(chan *Output, 10)}
 
-	c.executions.Store(msgID, exection)
+	c.executions.Store(msgID, execution)
 	defer c.executions.Delete(msgID)
 
 	if err := c.ws.WriteJSON(c.newExecuteRequest(msgID, code)); err != nil {
@@ -65,27 +63,35 @@ func (c *Channel) CodeExecute(ctx context.Context, code string) ([]*Output, erro
 
 	res := make([]*Output, 0)
 	for {
-		val, err := exection.Recv()
-		if err != nil || err == io.EOF {
-			return res, nil
+		select {
+		case <-ctx.Done():
+			return res, ctx.Err()
+		case err := <-c.errChan:
+			return res, err
+		case val, ok := <-execution.queue:
+			if !ok {
+				return res, nil
+			}
+			if val.Type == OutTypeEndOfExection {
+				return res, nil
+			}
+			res = append(res, val)
 		}
-
-		res = append(res, val)
 	}
 }
 
 func (c *Channel) CodeExecuteStream(ctx context.Context, code string) (*Exection, error) {
 	msgID := uuid.NewString()
-	exection := &Exection{queue: make(chan *Output, 10)}
+	execution := &Exection{queue: make(chan *Output, 10)}
 
-	c.executions.Store(msgID, exection)
+	c.executions.Store(msgID, execution)
 	defer c.executions.Delete(msgID)
 
 	if err := c.ws.WriteJSON(c.newExecuteRequest(msgID, code)); err != nil {
 		return nil, err
 	}
 
-	return exection, nil
+	return execution, nil
 }
 
 func (c *Channel) newExecuteRequest(msgID, code string) *JupyterRequestMessage {
@@ -113,23 +119,35 @@ func (c *Channel) newExecuteRequest(msgID, code string) *JupyterRequestMessage {
 			"allow_stdin":      false,
 			"stop_on_error":    true,
 		},
+		Channel: "shell",
 	}
 }
 
 func (c *Channel) receiveMessage() error {
 	go func() {
+		defer close(c.errChan)
+
 		for {
-			_, raw, err := c.ws.ReadMessage()
-			if err != nil {
+			select {
+			case <-c.done:
 				return
-			}
+			default:
+				_, raw, err := c.ws.ReadMessage()
+				if err != nil {
+					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+						c.errChan <- fmt.Errorf("websocket read error: %w", err)
+					}
+					return
+				}
 
-			var msg JupyterResponseMessage
-			if err := json.Unmarshal(raw, &msg); err != nil {
-				continue
-			}
+				var msg JupyterResponseMessage
+				if err := json.Unmarshal(raw, &msg); err != nil {
+					c.errChan <- fmt.Errorf("unmarshal message error: %w", err)
+					return
+				}
 
-			c.processMessage(&msg)
+				c.processMessage(&msg)
+			}
 		}
 	}()
 
