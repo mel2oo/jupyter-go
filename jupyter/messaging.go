@@ -3,6 +3,7 @@ package jupyter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -13,19 +14,18 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var ErrChannelClosed = errors.New("channel already closed, please reconnect")
+
 type Channel struct {
 	ws         *websocket.Conn
 	sessionID  string
 	executions sync.Map
 	done       chan struct{}
+	closed     bool
 	errChan    chan error
 }
 
 func (s *SessionService) Connect(ctx context.Context, sessionID, kernelID string) (*Channel, error) {
-	// 设置连接超时
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
 	ws, _, err := websocket.DefaultDialer.DialContext(ctx,
 		fmt.Sprintf("ws://%s/api/kernels/%s/channels?session_id=%s",
 			s.client.baseURL.Host, kernelID, sessionID), nil)
@@ -38,6 +38,7 @@ func (s *SessionService) Connect(ctx context.Context, sessionID, kernelID string
 		sessionID:  sessionID,
 		executions: sync.Map{},
 		done:       make(chan struct{}),
+		closed:     false,
 		errChan:    make(chan error, 1),
 	}
 
@@ -45,12 +46,20 @@ func (s *SessionService) Connect(ctx context.Context, sessionID, kernelID string
 }
 
 func (c *Channel) Close() error {
+	if c.closed {
+		return nil
+	}
+
 	close(c.done)
+	c.closed = true
 	return c.ws.Close()
 }
 
-// code execute
 func (c *Channel) CodeExecute(ctx context.Context, code string) ([]*Output, error) {
+	if c.closed {
+		return nil, ErrChannelClosed
+	}
+
 	msgID := uuid.NewString()
 	execution := &Exection{queue: make(chan *Output, 10)}
 
@@ -81,6 +90,10 @@ func (c *Channel) CodeExecute(ctx context.Context, code string) ([]*Output, erro
 }
 
 func (c *Channel) CodeExecuteStream(ctx context.Context, code string) (*Exection, error) {
+	if c.closed {
+		return nil, ErrChannelClosed
+	}
+
 	msgID := uuid.NewString()
 	execution := &Exection{queue: make(chan *Output, 10)}
 
@@ -94,35 +107,6 @@ func (c *Channel) CodeExecuteStream(ctx context.Context, code string) (*Exection
 	return execution, nil
 }
 
-func (c *Channel) newExecuteRequest(msgID, code string) *JupyterRequestMessage {
-	return &JupyterRequestMessage{
-		Header: MessageHeader{
-			MsgID:    msgID,
-			MsgType:  MsgExecuteRequest,
-			Username: "go-client",
-			Session:  c.sessionID,
-			Version:  "5.3",
-			Date:     time.Now().UTC().Format(time.RFC3339),
-		},
-		ParentHeader: MessageHeader{},
-		Metadata: map[string]any{
-			"trusted":      true,
-			"deletedCells": []any{},
-			"recordTiming": false,
-			"cellId":       uuid.NewString(),
-		},
-		Content: map[string]any{
-			"code":             code,
-			"slient":           true,
-			"store_history":    true,
-			"user_expressions": map[string]any{},
-			"allow_stdin":      false,
-			"stop_on_error":    true,
-		},
-		Channel: "shell",
-	}
-}
-
 func (c *Channel) receiveMessage() error {
 	go func() {
 		defer close(c.errChan)
@@ -134,9 +118,7 @@ func (c *Channel) receiveMessage() error {
 			default:
 				_, raw, err := c.ws.ReadMessage()
 				if err != nil {
-					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-						c.errChan <- fmt.Errorf("websocket read error: %w", err)
-					}
+					c.errChan <- fmt.Errorf("websocket read error: %w", err)
 					return
 				}
 
@@ -224,6 +206,35 @@ func (c *Channel) processMessage(msg *JupyterResponseMessage) {
 
 	case MsgExecuteInput:
 		execution.setInputAccepted()
+	}
+}
+
+func (c *Channel) newExecuteRequest(msgID, code string) *JupyterRequestMessage {
+	return &JupyterRequestMessage{
+		Header: MessageHeader{
+			MsgID:    msgID,
+			MsgType:  MsgExecuteRequest,
+			Username: "go-client",
+			Session:  c.sessionID,
+			Version:  "5.3",
+			Date:     time.Now().UTC().Format(time.RFC3339),
+		},
+		ParentHeader: MessageHeader{},
+		Metadata: map[string]any{
+			"trusted":      true,
+			"deletedCells": []any{},
+			"recordTiming": false,
+			"cellId":       uuid.NewString(),
+		},
+		Content: map[string]any{
+			"code":             code,
+			"slient":           true,
+			"store_history":    true,
+			"user_expressions": map[string]any{},
+			"allow_stdin":      false,
+			"stop_on_error":    true,
+		},
+		Channel: "shell",
 	}
 }
 
